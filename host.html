@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Quest — Host Control Panel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+// ================================================================
+// FIREBASE CONFIG — replace with your own from console.firebase.google.com
+// ================================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, push, remove, onChildAdded, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyPLACEHOLDER_REPLACE_ME",
+  authDomain: "oop-quest.firebaseapp.com",
+  databaseURL: "https://oop-quest-default-rtdb.firebaseio.com",
+  projectId: "oop-quest",
+  storageBucket: "oop-quest.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:0000000000000000"
+};
+
+// Expose Firebase helpers to global scope so non-module scripts can use them
+const app = initializeApp(FIREBASE_CONFIG);
+const db  = getDatabase(app);
+window._FB = { db, ref, set, onValue, push, remove, onChildAdded, serverTimestamp };
+window._FB_READY = true;
+window.dispatchEvent(new Event('firebase_ready'));
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --c1:#00ffff;--c2:#ff00ff;--c3:#ffff00;--c4:#00ff88;--c5:#ff8800;
+  --bg:#050510;--bg2:#0a0a1e;--bg3:#0d0d2e;
+  --card:rgba(255,255,255,0.04);--border:rgba(0,255,255,0.18);
+  --easy:#00e676;--med:#ffd740;--hard:#ff6d6d;
+}
+body{font-family:'Exo 2',sans-serif;background:var(--bg);color:#e0e8ff;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 70% 50% at 10% 10%,rgba(0,255,255,0.06) 0%,transparent 60%),
+  radial-gradient(ellipse 60% 40% at 90% 80%,rgba(255,0,255,0.05) 0%,transparent 60%),
+  repeating-linear-gradient(0deg,transparent,transparent 60px,rgba(0,255,255,0.012) 60px,rgba(0,255,255,0.012) 61px),
+  repeating-linear-gradient(90deg,transparent,transparent 60px,rgba(0,255,255,0.012) 60px,rgba(0,255,255,0.012) 61px);
+  pointer-events:none;z-index:0;}
+.wrap{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.5rem;}
+
+/* HEADER */
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border);}
+.hdr-left h1{font-family:'Orbitron',monospace;font-size:1.6rem;color:var(--c1);text-shadow:0 0 20px rgba(0,255,255,0.4);}
+.hdr-left p{font-size:0.85rem;color:rgba(200,220,255,0.4);margin-top:4px;}
+.status-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:20px;font-size:0.85rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;}
+.pill-waiting{background:rgba(255,215,64,0.12);border:1px solid rgba(255,215,64,0.3);color:var(--med);}
+.pill-running{background:rgba(0,230,118,0.12);border:1px solid rgba(0,230,118,0.3);color:var(--easy);}
+.pill-ended{background:rgba(255,109,109,0.12);border:1px solid rgba(255,109,109,0.3);color:var(--hard);}
+.dot{width:8px;height:8px;border-radius:50%;}
+.dot-w{background:var(--med);animation:blink 1.2s ease infinite;}
+.dot-r{background:var(--easy);box-shadow:0 0 8px var(--easy);}
+.dot-e{background:var(--hard);}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 28px;border-radius:8px;border:none;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:0.95rem;font-weight:600;transition:all 0.2s;letter-spacing:0.04em;text-transform:uppercase;}
+.btn-start{background:linear-gradient(135deg,var(--easy),#009944);color:#000;box-shadow:0 0 20px rgba(0,230,118,0.35);}
+.btn-start:hover{transform:translateY(-2px);box-shadow:0 0 32px rgba(0,230,118,0.55);}
+.btn-pause{background:linear-gradient(135deg,var(--med),#cc8800);color:#000;}
+.btn-next{background:linear-gradient(135deg,var(--c1),#0088ff);color:#000;box-shadow:0 0 16px rgba(0,255,255,0.3);}
+.btn-next:hover{box-shadow:0 0 28px rgba(0,255,255,0.5);}
+.btn-end{background:linear-gradient(135deg,var(--hard),#aa0033);color:#fff;}
+.btn-lb{background:linear-gradient(135deg,#ffd700,#ff8800);color:#000;}
+.btn-ghost{background:rgba(255,255,255,0.06);color:#cde;border:1px solid var(--border);}
+.btn-ghost:hover{background:rgba(255,255,255,0.1);}
+.btn-sm{padding:7px 16px;font-size:0.8rem;}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none!important;}
+
+/* GRID LAYOUT */
+.grid-main{display:grid;grid-template-columns:340px 1fr;gap:1.5rem;}
+@media(max-width:900px){.grid-main{grid-template-columns:1fr;}}
+.grid-right{display:grid;grid-template-rows:auto auto;gap:1.5rem;}
+.grid-bottom{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;}
+@media(max-width:700px){.grid-bottom{grid-template-columns:1fr;}}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;backdrop-filter:blur(4px);}
+.card-title{font-family:'Orbitron',monospace;font-size:0.8rem;color:var(--c1);letter-spacing:0.08em;margin-bottom:1.2rem;display:flex;align-items:center;gap:8px;}
+
+/* QR */
+.qr-box{display:flex;flex-direction:column;align-items:center;gap:1rem;}
+#qrcode{background:#fff;padding:12px;border-radius:12px;display:inline-block;}
+.quiz-code{font-family:'Orbitron',monospace;font-size:2.2rem;font-weight:900;letter-spacing:0.35em;color:var(--c1);text-shadow:0 0 24px rgba(0,255,255,0.5);}
+.qr-hint{font-size:0.78rem;color:rgba(200,220,255,0.35);text-align:center;}
+
+/* CONTROL PANEL */
+.ctrl-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.2rem;}
+
+/* QUESTION PREVIEW */
+.q-preview{background:rgba(0,0,0,0.3);border:1px solid rgba(0,255,255,0.12);border-radius:12px;padding:1.2rem;margin-bottom:1rem;}
+.q-preview-num{font-size:0.75rem;color:rgba(200,220,255,0.4);letter-spacing:0.1em;margin-bottom:6px;}
+.q-preview-text{font-size:0.95rem;line-height:1.6;color:#dde8ff;}
+.q-code{background:rgba(0,0,0,0.5);border-left:3px solid var(--c1);border-radius:6px;padding:0.8rem 1rem;font-family:'Courier New',monospace;font-size:0.82rem;color:#a8f0a0;white-space:pre;overflow-x:auto;margin-top:0.8rem;}
+.answers-preview{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:1rem;}
+.ans-item{padding:8px 12px;border-radius:8px;font-size:0.85rem;display:flex;align-items:center;gap:8px;}
+.ans-correct{background:rgba(0,230,118,0.12);border:1px solid rgba(0,230,118,0.3);color:var(--easy);}
+.ans-wrong{background:rgba(255,255,255,0.04);border:1px solid rgba(200,220,255,0.1);color:rgba(200,220,255,0.5);}
+.ans-letter{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;}
+.ans-letter-c{background:var(--easy);color:#000;}
+.ans-letter-w{background:rgba(200,220,255,0.1);color:rgba(200,220,255,0.4);}
+
+/* TIMER CONTROL */
+.timer-ctrl{display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem;}
+.big-timer{font-family:'Orbitron',monospace;font-size:3rem;font-weight:900;min-width:80px;text-align:center;line-height:1;}
+.timer-bar-wrap{flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:10px;}
+.timer-bar{height:10px;border-radius:4px;background:linear-gradient(90deg,var(--c1),var(--c2));transition:width 1s linear;}
+
+/* LEVEL TAG */
+.level-tag{display:inline-flex;align-items:center;padding:3px 12px;border-radius:20px;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
+.lv-easy{background:rgba(0,230,118,0.15);color:var(--easy);}
+.lv-medium{background:rgba(255,215,64,0.15);color:var(--med);}
+.lv-advanced{background:rgba(255,109,109,0.15);color:var(--hard);}
+
+/* STATS ROW */
+.stats-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem;}
+@media(max-width:600px){.stats-strip{grid-template-columns:repeat(2,1fr);}}
+.stat-cell{background:rgba(255,255,255,0.04);border:1px solid rgba(200,220,255,0.1);border-radius:12px;padding:1rem;text-align:center;}
+.stat-val{font-family:'Orbitron',monospace;font-size:1.6rem;font-weight:700;}
+.stat-lbl{font-size:0.72rem;color:rgba(200,220,255,0.4);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;}
+
+/* PLAYERS TABLE */
+.players-table{width:100%;border-collapse:collapse;}
+.players-table th{font-size:0.72rem;color:rgba(200,220,255,0.4);letter-spacing:0.08em;text-transform:uppercase;padding:6px 10px;text-align:left;border-bottom:1px solid rgba(200,220,255,0.08);}
+.players-table td{padding:8px 10px;font-size:0.88rem;border-bottom:1px solid rgba(255,255,255,0.04);}
+.players-table tr:last-child td{border-bottom:none;}
+.players-table tr:hover td{background:rgba(255,255,255,0.03);}
+.p-rank{font-family:'Orbitron',monospace;font-size:0.85rem;font-weight:700;}
+.p-char{font-size:1.2rem;}
+.p-score{font-family:'Orbitron',monospace;color:var(--c1);font-size:0.9rem;}
+.p-bar{width:80px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;display:inline-block;vertical-align:middle;}
+.p-bar-fill{height:5px;border-radius:3px;background:linear-gradient(90deg,var(--c1),var(--c2));}
+.p-status{font-size:0.75rem;padding:3px 10px;border-radius:10px;}
+.ps-lobby{background:rgba(255,215,64,0.12);color:var(--med);}
+.ps-playing{background:rgba(0,230,118,0.12);color:var(--easy);}
+.ps-done{background:rgba(0,255,255,0.1);color:var(--c1);}
+
+/* LEADERBOARD */
+.lb-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(200,220,255,0.07);border-radius:10px;margin-bottom:8px;transition:all 0.2s;}
+.lb-row:hover{background:rgba(255,255,255,0.05);border-color:rgba(0,255,255,0.2);}
+.lb-medal{font-size:1.1rem;width:28px;text-align:center;}
+.lb-name{flex:1;font-weight:600;font-size:0.9rem;}
+.lb-sub{font-size:0.75rem;color:rgba(200,220,255,0.4);}
+.lb-pts{font-family:'Orbitron',monospace;font-size:1rem;font-weight:700;color:var(--c1);}
+
+/* LEVEL DIST */
+.lv-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:0.85rem;}
+.lv-name{width:70px;font-weight:600;}
+.lv-track{flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:8px;}
+.lv-fill{height:8px;border-radius:4px;}
+.lv-pct{width:36px;text-align:right;color:rgba(200,220,255,0.5);font-size:0.78rem;}
+
+/* TOAST */
+.toast{position:fixed;bottom:2rem;right:2rem;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:600;z-index:999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast-ok{background:rgba(0,230,118,0.2);border:1px solid rgba(0,230,118,0.4);color:var(--easy);}
+.toast-warn{background:rgba(255,215,64,0.15);border:1px solid rgba(255,215,64,0.3);color:var(--med);}
+
+/* PROGRESS */
+.prog-wrap{background:rgba(255,255,255,0.05);border-radius:4px;height:6px;margin-bottom:0.8rem;}
+.prog-bar{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--c1),var(--c2));transition:width 0.5s;}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(0,255,255,0.2);border-radius:3px;}
+
+.fade-in{animation:fi 0.4s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<div class="wrap fade-in">
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <h1>🖥 HOST CONTROL PANEL</h1>
+      <p>OOP Quest · CSC1200 · Dr. AMR MEGAHED · ECU Room B216</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span id="fbStatus" style="font-size:0.78rem;padding:5px 14px;border-radius:12px;background:rgba(255,215,64,0.1);border:1px solid rgba(255,215,64,0.3);color:rgba(255,215,64,0.8);">⏳ Connecting…</span>
+      <div class="status-pill pill-waiting" id="statusPill">
+        <div class="dot dot-w" id="statusDot"></div>
+        <span id="statusText">Waiting for Players</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetAll()">🔄 Reset</button>
+    </div>
+  </div>
+
+  <!-- STATS STRIP -->
+  <div class="stats-strip">
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--c1);" id="sPlayers">0</div>
+      <div class="stat-lbl">Players</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--c3);" id="sQuestion">—</div>
+      <div class="stat-lbl">Question</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--easy);" id="sAnswered">0%</div>
+      <div class="stat-lbl">Answered</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--c2);" id="sCorrectRate">—</div>
+      <div class="stat-lbl">Correct Rate</div>
+    </div>
+  </div>
+
+  <div class="grid-main">
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+      <!-- QR + CODE -->
+      <div class="card">
+        <div class="card-title">📱 JOIN CODE & QR</div>
+        <div class="qr-box">
+          <div id="qrcode"></div>
+          <div class="quiz-code">OOPCSC</div>
+          <div class="qr-hint">Students open student.html and enter this code<br>or scan this QR to join instantly</div>
+        </div>
+      </div>
+
+      <!-- QUESTION NAVIGATOR -->
+      <div class="card">
+        <div class="card-title">🗺 QUESTION NAVIGATOR</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+          <span style="font-size:0.85rem;color:rgba(200,220,255,0.5);">Jump to question:</span>
+          <span class="level-tag lv-easy" id="navLevelTag">EASY</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:1rem;">
+          <input type="number" id="jumpInput" min="1" max="100" value="1" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:#e0e8ff;font-family:'Exo 2',sans-serif;font-size:0.9rem;width:80px;outline:none;">
+          <button class="btn btn-ghost" style="flex:1;" onclick="jumpToQuestion()">Jump</button>
+        </div>
+        <div class="prog-wrap">
+          <div class="prog-bar" id="navProgress" style="width:0%"></div>
+        </div>
+        <div style="font-size:0.8rem;color:rgba(200,220,255,0.4);text-align:center;" id="navInfo">Q 0 / 100</div>
+        <div style="margin-top:1rem;">
+          <div class="lv-row"><span class="lv-name" style="color:var(--easy);">Easy</span><div class="lv-track"><div class="lv-fill" style="width:20%;background:var(--easy);"></div></div><span class="lv-pct">20</span></div>
+          <div class="lv-row"><span class="lv-name" style="color:var(--med);">Medium</span><div class="lv-track"><div class="lv-fill" style="width:30%;background:var(--med);"></div></div><span class="lv-pct">30</span></div>
+          <div class="lv-row"><span class="lv-name" style="color:var(--hard);">Advanced</span><div class="lv-track"><div class="lv-fill" style="width:50%;background:var(--hard);"></div></div><span class="lv-pct">50</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="grid-right">
+
+      <!-- CONTROL + CURRENT QUESTION -->
+      <div class="card">
+        <div class="card-title">⚙️ QUIZ CONTROLS</div>
+
+        <!-- CONTROL BUTTONS -->
+        <div class="ctrl-row">
+          <button class="btn btn-start" id="btnStart" onclick="startQuiz()">▶ START QUIZ</button>
+          <button class="btn btn-pause" id="btnPause" onclick="togglePause()" disabled>⏸ PAUSE</button>
+          <button class="btn btn-next" id="btnNext" onclick="nextQuestion()" disabled>⏭ NEXT Q</button>
+          <button class="btn btn-end" id="btnEnd" onclick="endQuiz()" disabled>⏹ END QUIZ</button>
+          <button class="btn btn-lb" onclick="showLeaderboard()">🏆 LEADERBOARD</button>
+        </div>
+
+        <!-- TIMER -->
+        <div class="timer-ctrl">
+          <div class="big-timer" id="hostTimerNum" style="color:var(--c1);">—</div>
+          <div style="flex:1;">
+            <div class="timer-bar-wrap"><div class="timer-bar" id="hostTimerBar" style="width:100%"></div></div>
+            <div style="font-size:0.75rem;color:rgba(200,220,255,0.3);margin-top:4px;" id="timerHint">Start the quiz to begin</div>
+          </div>
+        </div>
+
+        <!-- QUESTION PREVIEW -->
+        <div id="qPreviewBox" class="q-preview">
+          <div class="q-preview-num">CURRENT QUESTION PREVIEW</div>
+          <div class="q-preview-text" id="qPreviewText" style="color:rgba(200,220,255,0.3);">No question loaded yet. Press START QUIZ to begin.</div>
+        </div>
+
+        <!-- ANSWERS PREVIEW -->
+        <div class="answers-preview" id="answersPreview"></div>
+
+        <!-- ANSWER REVEAL BUTTON -->
+        <div style="margin-top:1rem;display:flex;gap:10px;">
+          <button class="btn btn-ghost btn-sm" id="btnReveal" onclick="revealAnswer()" disabled>👁 Reveal Answer</button>
+          <button class="btn btn-ghost btn-sm" id="btnForceReveal" onclick="forceRevealAll()" disabled>📢 Force Show to Students</button>
+        </div>
+      </div>
+
+      <!-- BOTTOM GRID -->
+      <div class="grid-bottom">
+
+        <!-- PLAYERS -->
+        <div class="card">
+          <div class="card-title">👥 PLAYERS</div>
+          <div style="max-height:260px;overflow-y:auto;">
+            <table class="players-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Player</th><th>Score</th><th>Progress</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="playersBody">
+                <tr><td colspan="5" style="text-align:center;color:rgba(200,220,255,0.3);padding:1.5rem 0;">No players yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:1rem;display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="addDemoPlayers()">+ Add Demo Players</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearPlayers()">🗑 Clear</button>
+          </div>
+        </div>
+
+        <!-- LIVE LEADERBOARD -->
+        <div class="card">
+          <div class="card-title">🏆 LIVE LEADERBOARD</div>
+          <div id="lbBox" style="max-height:260px;overflow-y:auto;">
+            <div style="color:rgba(200,220,255,0.3);text-align:center;padding:2rem 0;font-size:0.9rem;">Quiz hasn't started</div>
+          </div>
+          <div style="margin-top:1rem;">
+            <button class="btn btn-lb btn-sm" style="width:100%;" onclick="broadcastLeaderboard()">📡 Push Leaderboard to Students</button>
+          </div>
+        </div>
+
+      </div><!-- /grid-bottom -->
+    </div><!-- /grid-right -->
+  </div><!-- /grid-main -->
+</div><!-- /wrap -->
+
+<script>
+// ================================================================
+// QUESTIONS (100 total: 20 easy, 30 medium, 50 advanced)
+// ================================================================
+const ALL_QUESTIONS = [
+  // EASY (20)
+  {level:'easy',text:'What does OOP stand for?',options:['Object-Oriented Programming','Open Operator Protocol','Object Overloading Practice','Optional Output Programming'],correct:0},
+  {level:'easy',text:'Which keyword is used to define a class in C++?',options:['object','struct','class','define'],correct:2},
+  {level:'easy',text:'What is an object in OOP?',options:['A function definition','A primitive data type','An instance of a class','A loop construct'],correct:2},
+  {level:'easy',text:'Which access modifier makes members accessible ONLY within the class?',options:['public','protected','private','static'],correct:2},
+  {level:'easy',text:'A constructor has the same name as the:',options:['Method','Object','Class','Variable'],correct:2},
+  {level:'easy',text:'What is the return type of a constructor?',options:['void','int','bool','No return type'],correct:3},
+  {level:'easy',text:'The "is-a" relationship in OOP is represented by:',options:['Composition','Encapsulation','Inheritance','Polymorphism'],correct:2},
+  {level:'easy',text:'Which OOP concept bundles data and methods into one unit?',options:['Inheritance','Encapsulation','Polymorphism','Abstraction'],correct:1},
+  {level:'easy',text:'A destructor is called when:',options:['An object is created','A method is called','An object goes out of scope','A class is defined'],correct:2},
+  {level:'easy',text:'Which symbol is used to call a method on an object?',options:['->','::','.','#'],correct:2},
+  {level:'easy',text:'What does "public" access mean?',options:['Only the class can access it','Only derived classes can access it','Anyone can access it','Only static methods can access it'],correct:2},
+  {level:'easy',text:'In C++, which feature allows reusing code from existing classes?',options:['Encapsulation','Abstraction','Inheritance','Overloading'],correct:2},
+  {level:'easy',text:'OOP contrasts with which programming style?',options:['Functional','Procedural','Logical','Declarative'],correct:1},
+  {level:'easy',text:'What is a class in OOP?',options:['An instance','A function','A blueprint for objects','A variable'],correct:2},
+  {level:'easy',text:'Which of the following is NOT an OOP language?',options:['C++','Java','FORTRAN','Smalltalk'],correct:2},
+  {level:'easy',text:'A getter method is used to:',options:['Set private data','Delete an object','Retrieve private data','Overload an operator'],correct:2},
+  {level:'easy',text:'How many objects can be created from one class?',options:['Only one','Exactly two','Unlimited','At most 10'],correct:2},
+  {level:'easy',text:'The "protected" modifier allows access to:',options:['All code','Only the current class','The class and its derived classes','Nobody'],correct:2},
+  {level:'easy',text:'What is polymorphism?',options:['Having multiple classes','Ability to take multiple forms','Hiding data','Inheriting from multiple parents'],correct:1},
+  {level:'easy',text:'A setter method is also called a:',options:['Accessor','Constructor','Mutator','Destructor'],correct:2},
+  // MEDIUM (30)
+  {level:'medium',text:'What is method overloading?',options:['Same method name, same parameters','Same method name, different parameters','Different method names, same return type','Redefining a parent method'],correct:1},
+  {level:'medium',text:'Which keyword makes a function virtual in C++?',options:['override','abstract','virtual','dynamic'],correct:2},
+  {level:'medium',text:'What is the correct syntax for a destructor?',options:['void ~ClassName()','~ClassName()','delete ClassName()','~void ClassName()'],correct:1},
+  {level:'medium',text:'Static class members belong to:',options:['Each object separately','The class itself','Derived classes only','Friend functions only'],correct:1},
+  {level:'medium',text:'In inheritance, the base class constructor is called:',options:['After the derived','Before the derived','At the same time','Never automatically'],correct:1},
+  {level:'medium',text:'What does the "." operator do?',options:['Points to a pointer member','Accesses a member via an object','Accesses a static method','Resolves scope'],correct:1},
+  {level:'medium',text:'Which inheritance mode makes public members become private in derived?',options:['Public inheritance','Protected inheritance','Private inheritance','Default inheritance'],correct:2},
+  {level:'medium',text:'Copy constructor signature is:',options:['ClassName(ClassName c)','ClassName(const ClassName& c)','ClassName copy(ClassName c)','void ClassName(ClassName c)'],correct:1},
+  {level:'medium',text:'An object that initializes another of the same class uses the:',options:['Default constructor','Parameterized constructor','Copy constructor','Destructor'],correct:2},
+  {level:'medium',text:'What is function overriding?',options:['Same function name, different params','Redefining base class function in derived class','Calling a deleted function','Adding virtual to a method'],correct:1},
+  {level:'medium',text:'The scope resolution operator "::" is used to:',options:['Access object members','Define methods outside the class','Call destructors','Delete pointers'],correct:1},
+  {level:'medium',text:'Which represents multilevel inheritance?',options:['A inherits B and C','C inherits B, B inherits A','A and B both inherit from C','A and B inherit simultaneously'],correct:1},
+  {level:'medium',text:'A static method can access:',options:['All instance members','Only static members','Protected members only','Private members of other classes'],correct:1},
+  {level:'medium',text:'Operator overloading in C++ uses the keyword:',options:['overload','redefine','operator','override'],correct:2},
+  {level:'medium',text:'Destructors run in which order compared to constructors?',options:['Same order','Random order','Reverse order','Simultaneous'],correct:2},
+  {level:'medium',text:'What is data hiding?',options:['Encrypting data','Making data private and exposing via methods','Deleting private members','Compressing the class'],correct:1},
+  {level:'medium',text:'How do you declare a static data member outside the class?',options:['static int ClassName::var = 0;','int ClassName::var = 0;','ClassName::var = 0;','static ClassName::var = 0;'],correct:1},
+  {level:'medium',text:'Which inheritance type does C++ support but Java does NOT?',options:['Single','Multilevel','Multiple','Hierarchical'],correct:2},
+  {level:'medium',text:'A friend function of a class:',options:['Is a member of the class','Is not a member but has access to private members','Can only access public members','Is always virtual'],correct:1},
+  {level:'medium',text:'Compile-time polymorphism is achieved through:',options:['Virtual functions','Pointers','Method overloading','Inheritance only'],correct:2},
+  {level:'medium',text:'Run-time polymorphism is achieved through:',options:['Function overloading','Templates','Virtual functions','Static methods'],correct:2},
+  {level:'medium',text:'What does "new" do in C++?',options:['Creates a static object','Allocates dynamic memory for an object','Overloads an operator','Calls the destructor'],correct:1},
+  {level:'medium',text:'Friendship in C++ is:',options:['Mutual and inherited','One-directional and not inherited','Always mutual','Always inherited'],correct:1},
+  {level:'medium',text:'Correct way to define a class method outside the class:',options:['void ClassName.method(){}','void method(){}','void ClassName::method(){}','ClassName void method(){}'],correct:2},
+  {level:'medium',text:'An initialization list looks like:',options:['ClassName() { a=0; }','ClassName() : a(0) {}','ClassName() := a(0) {}','ClassName() -> a(0) {}'],correct:1},
+  {level:'medium',text:'Abstract classes in C++ are created by:',options:['Using the abstract keyword','Having at least one pure virtual function','Inheriting from multiple classes','Making constructors private'],correct:1},
+  {level:'medium',text:'The "this" pointer refers to:',options:['The parent class object','The current object instance','A static member','A friend class'],correct:1},
+  {level:'medium',text:'Benefit of getters and setters:',options:['Faster execution','Input validation and controlled access','More memory usage','Shorter code'],correct:1},
+  {level:'medium',text:'Which OOP concept hides unnecessary details?',options:['Encapsulation','Inheritance','Abstraction','Polymorphism'],correct:2},
+  {level:'medium',text:'If you provide no constructor, the compiler provides:',options:['Compile error','A default constructor','Object cannot be created','Random initialization'],correct:1},
+  // ADVANCED (50)
+  {level:'advanced',text:'What is a pure virtual function?',options:['A virtual function with a body','Declared with = 0 and no body in base','A function that cannot be overridden','A static virtual function'],correct:1},
+  {level:'advanced',text:'A class with at least one pure virtual function is:',options:['Interface class','Abstract class','Template class','Friend class'],correct:1},
+  {level:'advanced',text:'Can you instantiate an abstract class directly?',options:['Yes','No','Only with static','Only with friend'],correct:1},
+  {level:'advanced',text:'class A{public: A(){cout<<"A ";} ~A(){cout<<"~A ";}};\nclass B:public A{public: B(){cout<<"B ";} ~B(){cout<<"~B ";}};\nint main(){B b;}\nWhat is the output?',options:['A B ~A ~B','B A ~B ~A','A B ~B ~A','B ~B A ~A'],correct:2},
+  {level:'advanced',text:'Virtual functions implement which type of binding?',options:['Early (compile-time)','Static','Late (run-time)','Lexical'],correct:2},
+  {level:'advanced',text:'What is a vtable?',options:['A virtual variable table','A table of function pointers for virtual dispatch','A template table','A variable type table'],correct:1},
+  {level:'advanced',text:'The diamond problem occurs in:',options:['Single inheritance','Multiple inheritance','Hierarchical inheritance','Multilevel inheritance'],correct:1},
+  {level:'advanced',text:'Which keyword resolves the diamond problem in C++?',options:['override','final','virtual (in inheritance)','abstract'],correct:2},
+  {level:'advanced',text:'Shape* s = new Rect(); s->area(); — if area() is virtual in Shape and overridden in Rect, what prints?',options:['Shape','Rect','Error','ShapeRect'],correct:1},
+  {level:'advanced',text:'Which operator CANNOT be overloaded in C++?',options:['+','::','[]','<<'],correct:1},
+  {level:'advanced',text:'Purpose of a virtual destructor:',options:['Faster deletion','Ensure derived destructors are called via base pointer','Allow multiple destructors','Prevent object deletion'],correct:1},
+  {level:'advanced',text:'In multiple inheritance C inherits A and B both having show(). Calling c.show() causes:',options:['Calls A version','Calls B version','Ambiguity error','Calls both'],correct:2},
+  {level:'advanced',text:'What is object slicing?',options:['Splitting an object across files','Losing derived class data when assigned to a base object','Copying a const object','Deleting specific members'],correct:1},
+  {level:'advanced',text:'A function template in C++ provides:',options:['Runtime polymorphism','Compile-time generics','Virtual dispatch','Dynamic casting'],correct:1},
+  {level:'advanced',text:'What does the "override" keyword (C++11) do?',options:['Forces the function to be virtual','Checks that the function actually overrides a virtual base','Prevents further overriding','Makes it pure virtual'],correct:1},
+  {level:'advanced',text:'The "final" keyword in C++ prevents:',options:['Constructor calls','Further inheritance or overriding','Static access','Friend declarations'],correct:1},
+  {level:'advanced',text:'Which of these CANNOT be overloaded?',options:['[]','->','::','+'],correct:2},
+  {level:'advanced',text:'class Counter{static int count; public: Counter(){count++;} static int getCount(){return count;}};\nCounter a,b,c; cout<<Counter::getCount(); — output?',options:['0','1','2','3'],correct:3},
+  {level:'advanced',text:'A pure virtual function with "= 0" makes the class:',options:['Concrete','Abstract','Static','Final'],correct:1},
+  {level:'advanced',text:'Which is true about friend functions?',options:['They are members of the class','They violate encapsulation slightly but are useful','They are automatically virtual','They inherit with the class'],correct:1},
+  {level:'advanced',text:'Early binding (compile-time) uses:',options:['Virtual functions','Pointers to base','Function overloading','Dynamic_cast'],correct:2},
+  {level:'advanced',text:'What does dynamic_cast do?',options:['Casts at compile-time','Safe downcast with RTTI at runtime','Converts unrelated types','Casts integers to floats'],correct:1},
+  {level:'advanced',text:'Constructor overloading requires:',options:['Different names','Different return types','Different parameter lists','It is not allowed'],correct:2},
+  {level:'advanced',text:'Initialization list is preferred over assignment in constructor body because:',options:['It is slower','It directly initializes members, required for const/reference','It avoids constructors','It deletes default values'],correct:1},
+  {level:'advanced',text:'Which is true about static member functions?',options:['They have a "this" pointer','They can access non-static members','They belong to the class not the instance','They are always virtual'],correct:2},
+  {level:'advanced',text:'Protected inheritance means a public base member becomes:',options:['Public in derived','Protected in derived','Private in derived','Unchanged'],correct:1},
+  {level:'advanced',text:'Correct declaration of a pure virtual function:',options:['virtual void f();','virtual void f() = 0;','void f() = 0;','pure virtual void f();'],correct:1},
+  {level:'advanced',text:'A deep copy differs from a shallow copy because:',options:['It copies more members','It copies data pointed to, not just the pointer','It is faster','Done by the default copy constructor'],correct:1},
+  {level:'advanced',text:'int* data; MyClass a(5); MyClass b = a; — what is the issue?',options:['No issue','Double deletion due to shallow copy','Memory leak','Constructor not called'],correct:1},
+  {level:'advanced',text:'Which operator accesses a member through a pointer?',options:['.','::', '->', '&'],correct:2},
+  {level:'advanced',text:'What does "delete" do with a dynamically allocated object?',options:['Only frees memory','Calls destructor then frees memory','Only calls destructor','Marks memory reusable without cleanup'],correct:1},
+  {level:'advanced',text:'Which is true about hierarchical inheritance?',options:['One child, many parents','One parent, many children','Many parents, many children','One parent, one child'],correct:1},
+  {level:'advanced',text:'Member functions defined inside the class body are implicitly:',options:['Virtual','Inline','Static','Abstract'],correct:1},
+  {level:'advanced',text:'What does "typeid" do in C++?',options:['Checks if two objects are equal','Returns type information at runtime','Casts between types','Deletes type information'],correct:1},
+  {level:'advanced',text:'A class template is instantiated:',options:['When defined','When a specific type is provided','At runtime','Never automatically'],correct:1},
+  {level:'advanced',text:'Which statement about constructors is FALSE?',options:['They can be overloaded','They have no return type','They can be virtual','Called automatically at object creation'],correct:2},
+  {level:'advanced',text:'What is covariant return type?',options:['Overloaded function with different return types','Overriding function returning a more derived type than the base','A template return type','A static return type'],correct:1},
+  {level:'advanced',text:'Private members of a base class:',options:['Are inherited and accessible','Are inherited but inaccessible directly in derived','Are not inherited at all','Become public in derived class'],correct:1},
+  {level:'advanced',text:'A* p = new C(); p->show(); — if show() is virtual in A and overridden in B and C (C inherits B), what prints?',options:['A','B','C','Error'],correct:2},
+  {level:'advanced',text:'Copy assignment operator is called when:',options:['Copy constructor fires','An already-existing object is assigned from another','It cannot be overloaded','It runs before the destructor'],correct:1},
+  {level:'advanced',text:'The "Rule of Three" in C++ means:',options:['Three constructors required','If you define destructor, copy constructor, or copy assignment — define all three','Three access specifiers','Three levels of inheritance'],correct:1},
+  {level:'advanced',text:'Which is true about operator overloading?',options:['All operators can be overloaded','Overloading changes operator precedence','Operator meaning for built-in types can change','New operators cannot be created'],correct:3},
+  {level:'advanced',text:'What is the output of: int x=5; cout << x++;',options:['4','5','6','Undefined'],correct:1},
+  {level:'advanced',text:'Which keyword prevents a class from being inherited?',options:['abstract','static','final','sealed'],correct:2},
+  {level:'advanced',text:'An interface in C++ is most closely represented by:',options:['A struct','A class with all pure virtual functions','A template','A friend class'],correct:1},
+  {level:'advanced',text:'If a derived class does NOT override a pure virtual function:',options:['Runtime error','The base version is called','The derived class also becomes abstract','Compile error immediately'],correct:2},
+  {level:'advanced',text:'The "this" pointer in static methods:',options:['Points to the class','Points to NULL','Does not exist in static methods','Points to the base class'],correct:2},
+  {level:'advanced',text:'class Base → class Mid : Base → class Child : Mid — what prints on Child c;?',options:['Child Mid Base','Base Mid Child','Mid Base Child','Base Child Mid'],correct:1},
+  {level:'advanced',text:'Which best describes encapsulation?',options:['Hiding implementation and exposing only the interface','Creating multiple instances','Reusing parent class methods','Calling virtual functions'],correct:0},
+  {level:'advanced',text:'What does RTTI stand for?',options:['Runtime Type Inheritance','Run-Time Type Information','Real-Time Type Interface','Recursive Type Identification'],correct:1},
+];
+
+// Ordered: easy → medium → advanced
+const QUESTIONS = [
+  ...ALL_QUESTIONS.filter(q=>q.level==='easy'),
+  ...ALL_QUESTIONS.filter(q=>q.level==='medium'),
+  ...ALL_QUESTIONS.filter(q=>q.level==='advanced'),
+];
+
+// ================================================================
+// STATE
+// ================================================================
+const S = {
+  status: 'waiting', // waiting | running | paused | ended
+  currentQ: -1,
+  timeLeft: 0,
+  timeTotal: 0,
+  timerInterval: null,
+  paused: false,
+  answerRevealed: false,
+  players: [],
+  leaderboard: [],
+};
+
+// ================================================================
+// FIREBASE REALTIME — host → students & students → host
+// ================================================================
+let _db, _ref, _set, _onValue, _push, _remove, _onChildAdded, _serverTimestamp;
+
+function initFirebase() {
+  if (!window._FB) { setTimeout(initFirebase, 100); return; }
+  ({ db:_db, ref:_ref, set:_set, onValue:_onValue, push:_push, remove:_remove,
+     onChildAdded:_onChildAdded, serverTimestamp:_serverTimestamp } = window._FB);
+
+  const fs = document.getElementById('fbStatus');
+  if (fs) { fs.style.background='rgba(0,230,118,0.1)'; fs.style.borderColor='rgba(0,230,118,0.3)'; fs.style.color='rgba(0,230,118,0.9)'; fs.textContent='🟢 Firebase Connected'; }
+
+  listenStudents();
+}
+window.addEventListener('firebase_ready', initFirebase);
+if (window._FB_READY) initFirebase();
+
+/** Write host state to Firebase so students read it */
+function broadcast(msg) {
+  if (!_db) return;
+  _set(_ref(_db, 'quiz/hostState'), { ...msg, _t: Date.now() });
+}
+
+/** Listen for students joining or submitting answers */
+function listenStudents() {
+  // New joins
+  _onChildAdded(_ref(_db, 'quiz/students'), snap => {
+    const m = snap.val();
+    if (m && m.type === 'STUDENT_JOIN') handleStudentJoin({ ...m, id: snap.key });
+  });
+  // Answers (pushed under quiz/answers)
+  _onChildAdded(_ref(_db, 'quiz/answers'), snap => {
+    const m = snap.val();
+    if (m && m.type === 'STUDENT_ANSWER') handleStudentAnswer(m);
+  });
+}
+
+// ================================================================
+// INIT
+// ================================================================
+window.onload = () => {
+  generateQR();
+  // Reload any persisted players
+  const saved = localStorage.getItem('oop_quest_players');
+  if (saved) { S.players = JSON.parse(saved); renderPlayers(); }
+  // Reset after Firebase ready
+  window.addEventListener('firebase_ready', () => {
+    broadcast({ type: 'HOST_RESET' });
+  });
+  if (window._FB_READY) broadcast({ type: 'HOST_RESET' });
+};
+
+function generateQR() {
+  const url = location.href.replace('host.html', 'OOP.html') + '?code=OOPCSC';
+  new QRCode(document.getElementById('qrcode'), {
+    text: url, width: 160, height: 160,
+    colorDark: '#000', colorLight: '#fff'
+  });
+}
+
+// ================================================================
+// PLAYER MANAGEMENT
+// ================================================================
+function handleStudentJoin(m) {
+  if (S.players.find(p => p.id === m.id)) return;
+  S.players.push({
+    id: m.id, name: m.name, char: m.char, charName: m.charName,
+    score: 0, correct: 0, answered: 0, status: 'lobby',
+  });
+  saveAndRender();
+  toast(`${m.char} ${m.name} joined!`, 'ok');
+}
+
+function handleStudentAnswer(m) {
+  const p = S.players.find(p => p.id === m.id);
+  if (!p) return;
+  p.answered++;
+  if (m.correct) { p.correct++; p.score += m.points; }
+  p.status = 'playing';
+  saveAndRender();
+}
+
+function saveAndRender() {
+  localStorage.setItem('oop_quest_players', JSON.stringify(S.players));
+  renderPlayers();
+  renderLB();
+  document.getElementById('sPlayers').textContent = S.players.length;
+}
+
+function renderPlayers() {
+  const tbody = document.getElementById('playersBody');
+  if (!S.players.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:rgba(200,220,255,0.3);padding:1.5rem 0;">No players yet</td></tr>';
+    return;
+  }
+  const sorted = [...S.players].sort((a,b) => b.score - a.score);
+  tbody.innerHTML = sorted.map((p, i) => {
+    const pct = S.currentQ >= 0 ? Math.round(p.answered / (S.currentQ + 1) * 100) : 0;
+    const statusMap = { lobby:'ps-lobby', playing:'ps-playing', done:'ps-done' };
+    const statusLbl = { lobby:'Lobby', playing:'Playing', done:'Done' };
+    return `<tr>
+      <td class="p-rank" style="color:${i===0?'#ffd700':i===1?'#c0c0c0':i===2?'#cd7f32':'rgba(200,220,255,0.4)'}">${i+1}</td>
+      <td><span class="p-char">${p.char}</span> <span style="font-size:0.88rem;">${p.name}</span></td>
+      <td class="p-score">${p.score.toLocaleString()}</td>
+      <td><div class="p-bar"><div class="p-bar-fill" style="width:${pct}%"></div></div></td>
+      <td><span class="p-status ${statusMap[p.status]}">${statusLbl[p.status]}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderLB() {
+  const sorted = [...S.players].sort((a,b) => b.score - a.score || b.correct - a.correct);
+  const medals = ['🥇','🥈','🥉'];
+  const box = document.getElementById('lbBox');
+  if (!sorted.length) { box.innerHTML = '<div style="color:rgba(200,220,255,0.3);text-align:center;padding:2rem 0;font-size:0.9rem;">No data yet</div>'; return; }
+  box.innerHTML = sorted.map((p, i) => {
+    const medal = i < 3 ? medals[i] : `<span style="font-size:0.8rem;color:rgba(200,220,255,0.4);">#${i+1}</span>`;
+    return `<div class="lb-row">
+      <div class="lb-medal">${medal}</div>
+      <div style="font-size:1.1rem;">${p.char}</div>
+      <div style="flex:1;"><div class="lb-name">${p.name}</div><div class="lb-sub">${p.charName} · ${p.correct}✓</div></div>
+      <div class="lb-pts">${p.score.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+function addDemoPlayers() {
+  const demos = [
+    {name:'Ahmed Hassan',char:'🧙‍♂️',charName:'The Polymorphist'},
+    {name:'Sara Mohamed',char:'🔒',charName:'The Encapsulator'},
+    {name:'Omar Khalil',char:'🏗️',charName:'The Constructor'},
+    {name:'Nour Ibrahim',char:'🌀',charName:'The Abstract'},
+    {name:'Yusuf Ali',char:'⚡',charName:'The Overloader'},
+  ];
+  demos.forEach((d, i) => {
+    if (!S.players.find(p => p.name === d.name)) {
+      S.players.push({ id:'demo'+i, ...d, score: Math.floor(Math.random()*20000)+3000, correct: Math.floor(Math.random()*50)+30, answered: S.currentQ+1, status:'playing' });
+    }
+  });
+  saveAndRender();
+  toast('5 demo players added!', 'ok');
+}
+
+function clearPlayers() {
+  S.players = [];
+  localStorage.removeItem('oop_quest_players');
+  renderPlayers(); renderLB();
+  document.getElementById('sPlayers').textContent = '0';
+}
+
+// ================================================================
+// QUIZ CONTROL
+// ================================================================
+function startQuiz() {
+  if (!S.players.length && !confirm('No players joined yet. Start anyway for demo?')) return;
+  S.status = 'running'; S.currentQ = -1;
+  setStatus('running');
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  document.getElementById('btnNext').disabled = false;
+  document.getElementById('btnEnd').disabled = false;
+  document.getElementById('btnReveal').disabled = false;
+  document.getElementById('btnForceReveal').disabled = false;
+  broadcast({ type: 'QUIZ_START' });
+  nextQuestion();
+  toast('Quiz started! Students can now play.', 'ok');
+}
+
+function nextQuestion() {
+  if (S.currentQ >= QUESTIONS.length - 1) { endQuiz(); return; }
+  S.currentQ++;
+  S.answerRevealed = false;
+  S.paused = false;
+  document.getElementById('btnPause').textContent = '⏸ PAUSE';
+
+  const q = QUESTIONS[S.currentQ];
+  const timeMap = { easy:30, medium:25, advanced:20 };
+  S.timeTotal = timeMap[q.level];
+  S.timeLeft = S.timeTotal;
+
+  // Update UI
+  document.getElementById('sQuestion').textContent = (S.currentQ+1)+'/'+QUESTIONS.length;
+  document.getElementById('navInfo').textContent = 'Q '+(S.currentQ+1)+' / '+QUESTIONS.length;
+  document.getElementById('navProgress').style.width = ((S.currentQ+1)/QUESTIONS.length*100)+'%';
+
+  const lt = document.getElementById('navLevelTag');
+  lt.className = 'level-tag lv-'+q.level;
+  lt.textContent = q.level.toUpperCase();
+
+  renderQuestionPreview(q);
+
+  // Broadcast to students
+  broadcast({ type: 'QUESTION', index: S.currentQ, question: { level:q.level, text:q.text, options:q.options, correct:q.correct } });
+
+  startTimer();
+  updateAnsweredStat();
+}
+
+function renderQuestionPreview(q) {
+  document.getElementById('qPreviewText').textContent = q.text;
+  document.getElementById('qPreviewText').style.color = '#dde8ff';
+  const letters = ['A','B','C','D'];
+  document.getElementById('answersPreview').innerHTML = q.options.map((opt, i) =>
+    `<div class="ans-item ${i===q.correct?'ans-correct':'ans-wrong'}">
+      <div class="ans-letter ${i===q.correct?'ans-letter-c':'ans-letter-w'}">${letters[i]}</div>
+      <span>${opt}</span>
+    </div>`
+  ).join('');
+}
+
+function startTimer() {
+  clearInterval(S.timerInterval);
+  S.timerInterval = setInterval(() => {
+    if (S.paused) return;
+    S.timeLeft--;
+    updateTimerUI();
+    if (S.timeLeft <= 0) {
+      clearInterval(S.timerInterval);
+      onTimerEnd();
+    }
+  }, 1000);
+  updateTimerUI();
+  document.getElementById('timerHint').textContent = QUESTIONS[S.currentQ].level.toUpperCase() + ' · ' + S.timeTotal + 's per question';
+}
+
+function updateTimerUI() {
+  const pct = S.timeLeft / S.timeTotal * 100;
+  const el = document.getElementById('hostTimerNum');
+  el.textContent = S.timeLeft;
+  if (pct > 50) { el.style.color = 'var(--c1)'; }
+  else if (pct > 25) { el.style.color = 'var(--med)'; }
+  else { el.style.color = 'var(--hard)'; }
+  document.getElementById('hostTimerBar').style.width = pct + '%';
+}
+
+function onTimerEnd() {
+  broadcast({ type: 'TIME_UP', index: S.currentQ });
+  toast('Time up for Q'+(S.currentQ+1)+'!', 'warn');
+}
+
+function togglePause() {
+  S.paused = !S.paused;
+  document.getElementById('btnPause').textContent = S.paused ? '▶ RESUME' : '⏸ PAUSE';
+  broadcast({ type: S.paused ? 'PAUSE' : 'RESUME' });
+  toast(S.paused ? 'Quiz paused' : 'Quiz resumed', S.paused ? 'warn' : 'ok');
+}
+
+function revealAnswer() {
+  S.answerRevealed = true;
+  const q = QUESTIONS[S.currentQ];
+  toast('Answer revealed on host panel: ' + q.options[q.correct], 'ok');
+}
+
+function forceRevealAll() {
+  const q = QUESTIONS[S.currentQ];
+  broadcast({ type: 'REVEAL_ANSWER', index: S.currentQ, correct: q.correct });
+  toast('Answer pushed to all students!', 'ok');
+}
+
+function endQuiz() {
+  clearInterval(S.timerInterval);
+  S.status = 'ended';
+  setStatus('ended');
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnNext').disabled = true;
+  document.getElementById('hostTimerNum').textContent = '—';
+  document.getElementById('hostTimerBar').style.width = '0%';
+  broadcast({ type: 'QUIZ_END', leaderboard: [...S.players].sort((a,b)=>b.score-a.score) });
+  toast('Quiz ended! Leaderboard pushed to students.', 'ok');
+}
+
+function showLeaderboard() {
+  broadcastLeaderboard();
+  toast('Leaderboard sent to all students!', 'ok');
+}
+
+function broadcastLeaderboard() {
+  const sorted = [...S.players].sort((a,b)=>b.score-a.score||b.correct-a.correct);
+  broadcast({ type: 'SHOW_LEADERBOARD', leaderboard: sorted });
+}
+
+function jumpToQuestion() {
+  const n = parseInt(document.getElementById('jumpInput').value) - 1;
+  if (n < 0 || n >= QUESTIONS.length) { toast('Invalid question number', 'warn'); return; }
+  clearInterval(S.timerInterval);
+  S.currentQ = n - 1;
+  nextQuestion();
+  toast('Jumped to Q'+(n+1), 'ok');
+}
+
+function setStatus(s) {
+  const pill = document.getElementById('statusPill');
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  const map = {
+    waiting:{ cls:'pill-waiting', dcls:'dot-w', txt:'Waiting for Players' },
+    running:{ cls:'pill-running', dcls:'dot-r', txt:'Quiz Running' },
+    paused:{ cls:'pill-waiting', dcls:'dot-w', txt:'Paused' },
+    ended:{ cls:'pill-ended', dcls:'dot-e', txt:'Quiz Ended' },
+  };
+  const m = map[s];
+  pill.className = 'status-pill ' + m.cls;
+  dot.className = 'dot ' + m.dcls;
+  txt.textContent = m.txt;
+}
+
+function updateAnsweredStat() {
+  const total = S.players.length || 1;
+  const answered = S.players.filter(p=>p.answered >= S.currentQ+1).length;
+  document.getElementById('sAnswered').textContent = Math.round(answered/total*100)+'%';
+  const correctTotal = S.players.reduce((a,p)=>a+p.correct,0);
+  const answeredTotal = S.players.reduce((a,p)=>a+p.answered,0);
+  document.getElementById('sCorrectRate').textContent = answeredTotal > 0 ? Math.round(correctTotal/answeredTotal*100)+'%' : '—';
+}
+
+function resetAll() {
+  if (!confirm('Reset everything?')) return;
+  clearInterval(S.timerInterval);
+  S.status = 'waiting'; S.currentQ = -1; S.players = [];
+  setStatus('waiting');
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnNext').disabled = true;
+  document.getElementById('btnEnd').disabled = true;
+  document.getElementById('hostTimerNum').textContent = '—';
+  document.getElementById('sQuestion').textContent = '—';
+  document.getElementById('sAnswered').textContent = '0%';
+  document.getElementById('sCorrectRate').textContent = '—';
+  document.getElementById('navInfo').textContent = 'Q 0 / 100';
+  document.getElementById('navProgress').style.width = '0%';
+  document.getElementById('qPreviewText').textContent = 'No question loaded yet. Press START QUIZ to begin.';
+  document.getElementById('qPreviewText').style.color = 'rgba(200,220,255,0.3)';
+  document.getElementById('answersPreview').innerHTML = '';
+  localStorage.removeItem('oop_quest_players');
+  renderPlayers(); renderLB();
+  broadcast({ type: 'HOST_RESET' });
+  // Also clear Firebase student/answer nodes
+  if (_db) {
+    _set(_ref(_db, 'quiz/students'), null);
+    _set(_ref(_db, 'quiz/answers'), null);
+  }
+  toast('Session reset!', 'warn');
+}
+
+// ================================================================
+// TOAST
+// ================================================================
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = (type==='ok'?'✅ ':'⚠️ ') + msg;
+  el.className = 'toast show toast-' + (type==='ok'?'ok':'warn');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
